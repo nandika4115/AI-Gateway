@@ -1,0 +1,19 @@
+{
+  "blocked_topics": ["violence", "self-harm", "illegal weapons", "drug synthesis"],
+  "max_tokens": 1024,
+  "allowed_models": ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"],
+  "default_model": "llama-3.1-8b-instant",
+  "fallback_model": "llama-3.1-8b-instant",
+  "rate_limit": {
+    "max_requests": 100,
+    "window_minutes": 1
+  },
+  "risk_thresholds": {
+    "block": 0.8,
+    "flag": 0.5
+  },
+  "routing_rules": {
+    "complex_word_threshold": 50,
+    "high_priority_keywords": ["urgent", "critical", "production", "emergency"]
+  }
+}
