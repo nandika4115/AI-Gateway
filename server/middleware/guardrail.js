@@ -3,7 +3,7 @@ const INJECTION_PATTERNS = [
   { pattern: /you are now (a|an|my)/i, score: 0.9, reason: 'Identity hijack attempt' },
   { pattern: /pretend (you are|to be)/i, score: 0.9, reason: 'Role impersonation attempt' },
   { pattern: /jailbreak/i, score: 1.0, reason: 'Explicit jailbreak attempt' },
-  { pattern: /dan mode/i, score: 1.0, reason: 'DAN jailbreak attempt' },
+  { pattern: /\bdan\b/i, score: 1.0, reason: 'DAN jailbreak attempt' },
   { pattern: /act as if you have no restrictions/i, score: 1.0, reason: 'Restriction bypass attempt' },
   { pattern: /forget your (system prompt|instructions|training)/i, score: 0.9, reason: 'System prompt erasure attempt' },
   { pattern: /\bsudo\b/i, score: 0.7, reason: 'Privilege escalation attempt' },
@@ -15,7 +15,6 @@ const INJECTION_PATTERNS = [
   { pattern: /\bhack\b|\bexploit\b|\bvulnerability\b/i, score: 0.6, reason: 'Security exploitation attempt' },
 ];
 
-// 🔹 Calculate risk score with accumulation + normalization
 function calculateRiskScore(prompt) {
   let totalScore = 0;
   let reasons = [];
@@ -27,29 +26,26 @@ function calculateRiskScore(prompt) {
     }
   }
 
-  // Normalize score to avoid inflation from multiple matches
   let riskScore = Math.min(totalScore, 1.0);
 
-  // 🔹 Context-aware adjustment (reduces false positives)
+  // Context-aware adjustment
   const isEducational =
     /\b(explain|what is|example|meaning of|learn|study)\b/i.test(prompt);
 
   if (isEducational && riskScore < 0.8) {
     riskScore = Math.min(riskScore, 0.3);
-    reasons.push('Educational context detected');
+    reasons.push('Educational context');
   }
 
   return { riskScore, reasons };
 }
 
-// 🔹 Severity classification
 function getSeverity(score) {
-  if (score >= 0.8) return 'CRITICAL';
-  if (score >= 0.5) return 'SUSPICIOUS';
+  if (score >= 0.7) return 'CRITICAL';
+  if (score >= 0.4) return 'SUSPICIOUS';
   return 'SAFE';
 }
 
-// 🔹 Main middleware
 function guardrail(req, res, next) {
   const { prompt } = req.body;
 
@@ -60,22 +56,17 @@ function guardrail(req, res, next) {
   const { riskScore, reasons } = calculateRiskScore(prompt);
   const severity = getSeverity(riskScore);
 
-  // Attach metadata to request
   req.riskScore = riskScore;
   req.severity = severity;
   req.injectionReason = reasons.join(', ') || null;
 
-  // Decision logic
-  if (severity === 'CRITICAL') {
-    req.injectionDetected = true;
-    req.flagged = false;
-  } else if (severity === 'SUSPICIOUS') {
-    req.injectionDetected = false;
-    req.flagged = true;
-  } else {
-    req.injectionDetected = false;
-    req.flagged = false;
-  }
+  req.injectionDetected = severity === 'CRITICAL';
+  req.flagged = severity === 'SUSPICIOUS';
+
+  console.log(`\n[GUARDRAIL]`);
+  console.log(`Prompt: ${prompt}`);
+  console.log(`Score: ${riskScore} | Severity: ${severity}`);
+  console.log(`Reasons: ${req.injectionReason}`);
 
   next();
 }

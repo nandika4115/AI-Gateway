@@ -9,22 +9,26 @@ const policy = require('../policy.json');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// Cost per 1M tokens
+// ======================= COST CONFIG =======================
 const MODEL_COSTS = {
   'llama-3.1-8b-instant':   { input: 0.05, output: 0.08 },
   'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 }
 };
 
+// ======================= CHAT =======================
 router.post('/chat', guardrail, modelRouter, async (req, res) => {
   const requestId = uuidv4();
   const startTime = Date.now();
   const { prompt } = req.body;
 
-  let response, usedFallback = false;
-  let promptTokens = 0, completionTokens = 0;
+  console.log(`\n[${new Date().toLocaleTimeString()}] ─────────────────────────`);
+  console.log(`→ Prompt: "${prompt.substring(0, 60)}..."`);
+  console.log(`→ Risk: ${req.riskScore} | Severity: ${req.severity}`);
 
-  // 🚫 Block injection
-  if (req.injectionDetected) {
+  // 🚫 STRICT BLOCK
+  if (req.severity === 'CRITICAL' || req.riskScore >= 0.7) {
+    console.log(`🚫 BLOCKED — ${req.injectionReason}`);
+
     await Log.create({
       requestId,
       userIp: req.ip,
@@ -40,17 +44,22 @@ router.post('/chat', guardrail, modelRouter, async (req, res) => {
 
     return res.status(403).json({
       blocked: true,
-      reason: 'Prompt injection detected',
+      reason: 'Prompt injection detected and blocked.',
+      riskScore: req.riskScore,
+      severity: req.severity,
+      details: req.injectionReason,
       requestId
     });
   }
 
-  // 🚫 Policy block
+  // 🚫 POLICY BLOCK
   const blockedTopic = policy.blocked_topics.find(topic =>
     prompt.toLowerCase().includes(topic)
   );
 
   if (blockedTopic) {
+    console.log(`🚫 POLICY BLOCK — ${blockedTopic}`);
+
     await Log.create({
       requestId,
       userIp: req.ip,
@@ -70,6 +79,16 @@ router.post('/chat', guardrail, modelRouter, async (req, res) => {
     });
   }
 
+  if (req.flagged) {
+    console.log(`⚠️ FLAGGED — Suspicious input`);
+  }
+
+  console.log(`→ Model: ${req.selectedModel}`);
+  console.log(`→ Routing: ${req.routingReason}`);
+
+  let response, usedFallback = false;
+  let promptTokens = 0, completionTokens = 0;
+
   try {
     const completion = await groq.chat.completions.create({
       model: req.selectedModel,
@@ -81,15 +100,18 @@ router.post('/chat', guardrail, modelRouter, async (req, res) => {
     promptTokens = completion.usage.prompt_tokens;
     completionTokens = completion.usage.completion_tokens;
 
+    console.log(`✅ Success — Tokens: ${promptTokens + completionTokens}`);
+
   } catch (err) {
-    response = `[FALLBACK] Try again later`;
+    console.error(`⚠️ FALLBACK — ${err.message}`);
+    response = `[FALLBACK] Service temporarily unavailable`;
     usedFallback = true;
   }
 
   const latencyMs = Date.now() - startTime;
   const totalTokens = promptTokens + completionTokens;
 
-  // ✅ COST CALCULATION
+  // ======================= COST =======================
   const pricing = MODEL_COSTS[req.selectedModel] || { input: 0, output: 0 };
 
   const actualCost =
@@ -104,10 +126,9 @@ router.post('/chat', guardrail, modelRouter, async (req, res) => {
 
   const costSaved = naiveCost - actualCost;
 
-  const costReductionPercent =
-    naiveCost > 0 ? ((costSaved / naiveCost) * 100) : 0;
+  console.log(`💰 Cost saved: $${costSaved.toFixed(9)}`);
 
-  // ✅ SAVE LOG
+  // ======================= LOG =======================
   await Log.create({
     requestId,
     userIp: req.ip,
@@ -124,70 +145,44 @@ router.post('/chat', guardrail, modelRouter, async (req, res) => {
     latencyMs,
     usedFallback,
     estimatedCost: actualCost,
-    blocked: false
+    blocked: false,
+    injectionDetected: false
   });
 
-  // ✅ RESPONSE (FIXED)
   res.json({
     requestId,
     model: req.selectedModel,
     routingReason: req.routingReason,
     response,
     usage: { promptTokens, completionTokens, totalTokens },
-
-    actualCost: `$${actualCost.toFixed(9)}`,
-    naiveCost: `$${naiveCost.toFixed(9)}`,
     costSaved: `$${costSaved.toFixed(9)}`,
-    costReduction: `${costReductionPercent.toFixed(2)}%`,
-
     latencyMs,
     usedFallback
   });
 });
 
-
+// ======================= LOGS =======================
 router.get('/logs', async (req, res) => {
-  const logs = await Log.find()
-    .sort({ timestamp: -1 })
-    .limit(50)
-    .lean();
-
+  const logs = await Log.find().sort({ timestamp: -1 }).limit(50);
   res.json(logs);
 });
 
-
-// 📊 FIXED STATS API
+// ======================= STATS =======================
 router.get('/stats', async (req, res) => {
-  const [summary, costs, modelDist] = await Promise.all([
-
+  const [total, blocked, fallbacks, flagged, tokenAgg, modelAgg] = await Promise.all([
+    Log.countDocuments(),
+    Log.countDocuments({ blocked: true }),
+    Log.countDocuments({ usedFallback: true }),
+    Log.countDocuments({ flagged: true }),
     Log.aggregate([
       {
         $group: {
           _id: null,
-          totalRequests: { $sum: 1 },
           totalTokens: { $sum: '$totalTokens' },
-          avgLatency: { $avg: '$latencyMs' },
-          blocked: {
-            $sum: { $cond: ['$blocked', 1, 0] }
-          },
-          flagged: {
-            $sum: { $cond: ['$flagged', 1, 0] }
-          }
+          avgLatency: { $avg: '$latencyMs' }
         }
       }
     ]),
-
-    Log.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalCost: { $sum: '$estimatedCost' },
-          totalPromptTokens: { $sum: { $ifNull: ['$promptTokens', 0] } },
-          totalCompletionTokens: { $sum: { $ifNull: ['$completionTokens', 0] } }
-        }
-      }
-    ]),
-
     Log.aggregate([
       {
         $group: {
@@ -199,26 +194,29 @@ router.get('/stats', async (req, res) => {
     ])
   ]);
 
-  const stats = summary[0] || {};
-  const totalCost = costs[0]?.totalCost || 0;
-  const totalPromptTokens = costs[0]?.totalPromptTokens || 0;
-  const totalCompletionTokens = costs[0]?.totalCompletionTokens || 0;
-  const naivePricing = MODEL_COSTS['llama-3.3-70b-versatile'];
-  const totalNaiveCost =
-    (totalPromptTokens / 1_000_000) * naivePricing.input +
-    (totalCompletionTokens / 1_000_000) * naivePricing.output;
-  const totalCostSaved = Math.max(totalNaiveCost - totalCost, 0);
+  const agg = tokenAgg[0] || { totalTokens: 0, avgLatency: 0 };
+
+  // 💰 TOTAL COST SAVED
+  const totalCostAgg = await Log.aggregate([
+    {
+      $group: {
+        _id: null,
+        totalCost: { $sum: '$estimatedCost' }
+      }
+    }
+  ]);
+
+  const totalActualCost = totalCostAgg[0]?.totalCost || 0;
 
   res.json({
-    totalRequests: stats.totalRequests || 0,
-    blockedRequests: stats.blocked || 0,
-    flaggedRequests: stats.flagged || 0,
-    totalTokens: stats.totalTokens || 0,
-    avgLatencyMs: Math.round(stats.avgLatency || 0),
-
-    totalActualCost: `$${totalCost.toFixed(6)}`,
-    totalCostSaved: `$${totalCostSaved.toFixed(6)}`,
-    modelDistribution: modelDist
+    totalRequests: total,
+    blockedRequests: blocked,
+    flaggedRequests: flagged,
+    fallbacksUsed: fallbacks,
+    totalTokens: agg.totalTokens,
+    avgLatencyMs: Math.round(agg.avgLatency),
+    totalCostSaved: `$${totalActualCost.toFixed(6)}`,
+    modelDistribution: modelAgg
   });
 });
 
