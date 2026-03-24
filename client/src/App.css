@@ -1,0 +1,267 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0f1117;
+  color: #e2e8f0;
+  font-family: 'Courier New', monospace;
+  min-height: 100vh;
+}
+
+.header {
+  background: #1a1d2e;
+  border-bottom: 1px solid #2d3748;
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #63b3ed;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.header .tag {
+  background: #2d3748;
+  color: #68d391;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid #68d391;
+}
+
+.dot {
+  width: 8px; height: 8px;
+  background: #68d391;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.container { padding: 24px 32px; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: #1a1d2e;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.stat-card .label {
+  font-size: 11px;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.stat-card .value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #63b3ed;
+}
+
+.stat-card .value.danger { color: #fc8181; }
+.stat-card .value.warning { color: #f6ad55; }
+.stat-card .value.success { color: #68d391; }
+
+.section {
+  background: #1a1d2e;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.section-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #2d3748;
+  font-size: 12px;
+  color: #a0aec0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-box { padding: 20px; }
+
+.chat-input-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.chat-input-row input {
+  flex: 1;
+  background: #0f1117;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: #e2e8f0;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  outline: none;
+}
+
+.chat-input-row input:focus { border-color: #63b3ed; }
+
+.chat-input-row button {
+  background: #63b3ed;
+  color: #0f1117;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.chat-input-row button:disabled {
+  background: #2d3748;
+  color: #718096;
+  cursor: not-allowed;
+}
+
+.chat-response {
+  background: #0f1117;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 60px;
+}
+
+.chat-response .meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #2d3748;
+  flex-wrap: wrap;
+}
+
+.chat-response .meta span {
+  font-size: 11px;
+  color: #718096;
+}
+
+.chat-response .meta .highlight { color: #63b3ed; }
+.chat-response .meta .blocked-tag {
+  color: #fc8181;
+  font-weight: 700;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+th {
+  padding: 10px 16px;
+  text-align: left;
+  color: #718096;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #2d3748;
+}
+
+td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #1a1d2e;
+  color: #a0aec0;
+}
+
+tr:hover td { background: #0f1117; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.badge.blocked { background: #2d1515; color: #fc8181; border: 1px solid #fc8181; }
+.badge.success { background: #152d1e; color: #68d391; border: 1px solid #68d391; }
+.badge.fallback { background: #2d2515; color: #f6ad55; border: 1px solid #f6ad55; }
+
+.prompt-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refresh-btn {
+  background: transparent;
+  border: 1px solid #2d3748;
+  color: #a0aec0;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+}
+
+.refresh-btn:hover { border-color: #63b3ed; color: #63b3ed; }
+/* ── Add these to your existing App.css ── */
+
+/* 5-column stats grid (was 4) */
+.stats-grid {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+/* "Why this model" routing badge */
+.routing-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #1a1d2e;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.model-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+}
+
+.model-pill.large {
+  background: #553c9a;
+  color: #e9d8fd;
+}
+
+.model-pill.small {
+  background: #1c4532;
+  color: #9ae6b4;
+}
+
+.routing-reason {
+  font-size: 12px;
+  color: #a0aec0;
+}
