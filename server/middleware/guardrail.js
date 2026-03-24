@@ -15,28 +15,41 @@ const INJECTION_PATTERNS = [
   { pattern: /\bhack\b|\bexploit\b|\bvulnerability\b/i, score: 0.6, reason: 'Security exploitation attempt' },
 ];
 
+// 🔹 Calculate risk score with accumulation + normalization
 function calculateRiskScore(prompt) {
-  let maxScore = 0;
-  let matchedReason = null;
+  let totalScore = 0;
+  let reasons = [];
 
   for (const { pattern, score, reason } of INJECTION_PATTERNS) {
     if (pattern.test(prompt)) {
-      if (score > maxScore) {
-        maxScore = score;
-        matchedReason = reason;
-      }
+      totalScore += score;
+      reasons.push(reason);
     }
   }
 
-  return { riskScore: maxScore, reason: matchedReason };
+  // Normalize score to avoid inflation from multiple matches
+  let riskScore = Math.min(totalScore, 1.0);
+
+  // 🔹 Context-aware adjustment (reduces false positives)
+  const isEducational =
+    /\b(explain|what is|example|meaning of|learn|study)\b/i.test(prompt);
+
+  if (isEducational && riskScore < 0.8) {
+    riskScore = Math.min(riskScore, 0.3);
+    reasons.push('Educational context detected');
+  }
+
+  return { riskScore, reasons };
 }
 
+// 🔹 Severity classification
 function getSeverity(score) {
   if (score >= 0.8) return 'CRITICAL';
   if (score >= 0.5) return 'SUSPICIOUS';
   return 'SAFE';
 }
 
+// 🔹 Main middleware
 function guardrail(req, res, next) {
   const { prompt } = req.body;
 
@@ -44,15 +57,18 @@ function guardrail(req, res, next) {
     return res.status(400).json({ error: 'prompt is required' });
   }
 
-  const { riskScore, reason } = calculateRiskScore(prompt);
+  const { riskScore, reasons } = calculateRiskScore(prompt);
   const severity = getSeverity(riskScore);
 
+  // Attach metadata to request
   req.riskScore = riskScore;
   req.severity = severity;
-  req.injectionReason = reason;
+  req.injectionReason = reasons.join(', ') || null;
 
+  // Decision logic
   if (severity === 'CRITICAL') {
     req.injectionDetected = true;
+    req.flagged = false;
   } else if (severity === 'SUSPICIOUS') {
     req.injectionDetected = false;
     req.flagged = true;

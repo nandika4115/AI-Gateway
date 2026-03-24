@@ -9,7 +9,7 @@ const policy = require('../policy.json');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// Cost per 1M tokens (for savings calculation)
+// Cost per 1M tokens
 const MODEL_COSTS = {
   'llama-3.1-8b-instant':   { input: 0.05, output: 0.08 },
   'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 }
@@ -20,15 +20,15 @@ router.post('/chat', guardrail, modelRouter, async (req, res) => {
   const startTime = Date.now();
   const { prompt } = req.body;
 
-  console.log(`\n[${new Date().toLocaleTimeString()}] ─────────────────────────`);
-  console.log(`→ Prompt: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
-  console.log(`→ Risk Score: ${req.riskScore} | Severity: ${req.severity}`);
+  let response, usedFallback = false;
+  let promptTokens = 0, completionTokens = 0;
 
-  // Block CRITICAL injections
+  // 🚫 Block injection
   if (req.injectionDetected) {
-    console.log(`🚫 BLOCKED — ${req.injectionReason}`);
     await Log.create({
-      requestId, userIp: req.ip, prompt,
+      requestId,
+      userIp: req.ip,
+      prompt,
       injectionDetected: true,
       injectionReason: req.injectionReason,
       riskScore: req.riskScore,
@@ -37,48 +37,38 @@ router.post('/chat', guardrail, modelRouter, async (req, res) => {
       modelSelected: req.selectedModel,
       latencyMs: Date.now() - startTime
     });
+
     return res.status(403).json({
       blocked: true,
-      reason: 'Prompt injection detected. Request blocked.',
-      riskScore: req.riskScore,
-      severity: req.severity,
+      reason: 'Prompt injection detected',
       requestId
     });
   }
 
-  // Block policy-violating topics
+  // 🚫 Policy block
   const blockedTopic = policy.blocked_topics.find(topic =>
     prompt.toLowerCase().includes(topic)
   );
+
   if (blockedTopic) {
-    console.log(`🚫 BLOCKED — Policy violation: "${blockedTopic}"`);
     await Log.create({
-      requestId, userIp: req.ip, prompt,
-      injectionDetected: false,
+      requestId,
+      userIp: req.ip,
+      prompt,
+      blocked: true,
       injectionReason: `Policy violation: ${blockedTopic}`,
       riskScore: 1.0,
       severity: 'CRITICAL',
-      blocked: true,
       modelSelected: req.selectedModel,
       latencyMs: Date.now() - startTime
     });
+
     return res.status(403).json({
       blocked: true,
-      reason: `Request blocked by policy: topic "${blockedTopic}" is not allowed.`,
+      reason: `Blocked topic: ${blockedTopic}`,
       requestId
     });
   }
-
-  // Flag suspicious but allow through
-  if (req.flagged) {
-    console.log(`⚠️  FLAGGED — Risk score ${req.riskScore} (suspicious but allowed)`);
-  }
-
-  console.log(`→ Model: ${req.selectedModel}`);
-  console.log(`→ Routing: ${req.routingReason}`);
-
-  let response, usedFallback = false;
-  let promptTokens = 0, completionTokens = 0;
 
   try {
     const completion = await groq.chat.completions.create({
@@ -90,105 +80,145 @@ router.post('/chat', guardrail, modelRouter, async (req, res) => {
     response = completion.choices[0].message.content;
     promptTokens = completion.usage.prompt_tokens;
     completionTokens = completion.usage.completion_tokens;
-    console.log(`✅ OK — ${Date.now() - startTime}ms | Tokens: ${promptTokens + completionTokens}`);
 
   } catch (err) {
-    console.log(`⚠️  FALLBACK — Groq failed: ${err.message}`);
-    response = `[FALLBACK] I cannot process that request right now. Please try again later.`;
+    response = `[FALLBACK] Try again later`;
     usedFallback = true;
   }
 
   const latencyMs = Date.now() - startTime;
   const totalTokens = promptTokens + completionTokens;
 
-  // Cost savings calculation
-  const actualCost = MODEL_COSTS[req.selectedModel]
-    ? ((promptTokens / 1_000_000) * MODEL_COSTS[req.selectedModel].input) +
-      ((completionTokens / 1_000_000) * MODEL_COSTS[req.selectedModel].output)
-    : 0;
-  const naiveCost = MODEL_COSTS['llama-3.3-70b-versatile']
-    ? ((promptTokens / 1_000_000) * MODEL_COSTS['llama-3.3-70b-versatile'].input) +
-      ((completionTokens / 1_000_000) * MODEL_COSTS['llama-3.3-70b-versatile'].output)
-    : 0;
+  // ✅ COST CALCULATION
+  const pricing = MODEL_COSTS[req.selectedModel] || { input: 0, output: 0 };
+
+  const actualCost =
+    (promptTokens / 1_000_000) * pricing.input +
+    (completionTokens / 1_000_000) * pricing.output;
+
+  const naivePricing = MODEL_COSTS['llama-3.3-70b-versatile'];
+
+  const naiveCost =
+    (promptTokens / 1_000_000) * naivePricing.input +
+    (completionTokens / 1_000_000) * naivePricing.output;
+
   const costSaved = naiveCost - actualCost;
 
+  const costReductionPercent =
+    naiveCost > 0 ? ((costSaved / naiveCost) * 100) : 0;
+
+  // ✅ SAVE LOG
   await Log.create({
-    requestId, userIp: req.ip, prompt,
-    promptTokens, completionTokens, totalTokens,
+    requestId,
+    userIp: req.ip,
+    prompt,
+    promptTokens,
+    completionTokens,
+    totalTokens,
     modelSelected: req.selectedModel,
     routingReason: req.routingReason,
     riskScore: req.riskScore,
     severity: req.severity,
     flagged: req.flagged || false,
-    response, latencyMs, usedFallback,
+    response,
+    latencyMs,
+    usedFallback,
     estimatedCost: actualCost,
-    blocked: false,
-    injectionDetected: false
+    blocked: false
   });
 
+  // ✅ RESPONSE (FIXED)
   res.json({
     requestId,
     model: req.selectedModel,
     routingReason: req.routingReason,
-    riskScore: req.riskScore,
-    severity: req.severity,
-    flagged: req.flagged || false,
     response,
     usage: { promptTokens, completionTokens, totalTokens },
-    costSaved: `$${costSaved.toFixed(6)}`,
+
+    actualCost: `$${actualCost.toFixed(9)}`,
+    naiveCost: `$${naiveCost.toFixed(9)}`,
+    costSaved: `$${costSaved.toFixed(9)}`,
+    costReduction: `${costReductionPercent.toFixed(2)}%`,
+
     latencyMs,
     usedFallback
   });
 });
 
-// GET /api/logs
+
 router.get('/logs', async (req, res) => {
-  const logs = await Log.find().sort({ timestamp: -1 }).limit(50);
+  const logs = await Log.find()
+    .sort({ timestamp: -1 })
+    .limit(50)
+    .lean();
+
   res.json(logs);
 });
 
-// GET /api/stats
+
+// 📊 FIXED STATS API
 router.get('/stats', async (req, res) => {
-  const [total, blocked, fallbacks, flagged, tokenAgg, costAgg] = await Promise.all([
-    Log.countDocuments(),
-    Log.countDocuments({ blocked: true }),
-    Log.countDocuments({ usedFallback: true }),
-    Log.countDocuments({ flagged: true }),
-    Log.aggregate([{
-      $group: {
-        _id: null,
-        totalTokens: { $sum: '$totalTokens' },
-        avgLatency: { $avg: '$latencyMs' }
+  const [summary, costs, modelDist] = await Promise.all([
+
+    Log.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalRequests: { $sum: 1 },
+          totalTokens: { $sum: '$totalTokens' },
+          avgLatency: { $avg: '$latencyMs' },
+          blocked: {
+            $sum: { $cond: ['$blocked', 1, 0] }
+          },
+          flagged: {
+            $sum: { $cond: ['$flagged', 1, 0] }
+          }
+        }
       }
-    }]),
-    Log.aggregate([{
-      $group: {
-        _id: '$modelSelected',
-        count: { $sum: 1 },
-        totalTokens: { $sum: '$totalTokens' }
+    ]),
+
+    Log.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalCost: { $sum: '$estimatedCost' },
+          totalPromptTokens: { $sum: { $ifNull: ['$promptTokens', 0] } },
+          totalCompletionTokens: { $sum: { $ifNull: ['$completionTokens', 0] } }
+        }
       }
-    }])
+    ]),
+
+    Log.aggregate([
+      {
+        $group: {
+          _id: '$modelSelected',
+          count: { $sum: 1 },
+          tokens: { $sum: '$totalTokens' }
+        }
+      }
+    ])
   ]);
 
-  const agg = tokenAgg[0] || { totalTokens: 0, avgLatency: 0 };
-
-  // Calculate total cost saved
-  const haiku = costAgg.find(m => m._id === 'llama-3.1-8b-instant');
-  const sonnet = costAgg.find(m => m._id === 'llama-3.3-70b-versatile');
-  const haikusTokens = haiku?.totalTokens || 0;
-  const costIfAllLarge = (haikusTokens / 1_000_000) * 0.79;
-  const costIfSmall = (haikusTokens / 1_000_000) * 0.08;
-  const totalSaved = costIfAllLarge - costIfSmall;
+  const stats = summary[0] || {};
+  const totalCost = costs[0]?.totalCost || 0;
+  const totalPromptTokens = costs[0]?.totalPromptTokens || 0;
+  const totalCompletionTokens = costs[0]?.totalCompletionTokens || 0;
+  const naivePricing = MODEL_COSTS['llama-3.3-70b-versatile'];
+  const totalNaiveCost =
+    (totalPromptTokens / 1_000_000) * naivePricing.input +
+    (totalCompletionTokens / 1_000_000) * naivePricing.output;
+  const totalCostSaved = Math.max(totalNaiveCost - totalCost, 0);
 
   res.json({
-    totalRequests: total,
-    blockedRequests: blocked,
-    flaggedRequests: flagged,
-    fallbacksUsed: fallbacks,
-    totalTokens: agg.totalTokens,
-    avgLatencyMs: Math.round(agg.avgLatency),
-    totalCostSaved: `$${totalSaved.toFixed(4)}`,
-    modelDistribution: costAgg
+    totalRequests: stats.totalRequests || 0,
+    blockedRequests: stats.blocked || 0,
+    flaggedRequests: stats.flagged || 0,
+    totalTokens: stats.totalTokens || 0,
+    avgLatencyMs: Math.round(stats.avgLatency || 0),
+
+    totalActualCost: `$${totalCost.toFixed(6)}`,
+    totalCostSaved: `$${totalCostSaved.toFixed(6)}`,
+    modelDistribution: modelDist
   });
 });
 
