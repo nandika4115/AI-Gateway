@@ -28,15 +28,21 @@ function App() {
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
-    try {
-      const [statsRes, logsRes] = await Promise.all([
-        axios.get(`${API}/stats`),
-        axios.get(`${API}/logs`)
-      ]);
-      setStats(statsRes.data);
-      setLogs(logsRes.data);
-    } catch (err) {
-      console.error('Fetch error:', err);
+    const [statsRes, logsRes] = await Promise.allSettled([
+      axios.get(`${API}/stats`),
+      axios.get(`${API}/logs`)
+    ]);
+
+    if (statsRes.status === 'fulfilled') {
+      setStats(statsRes.value.data);
+    } else {
+      console.error('Stats fetch error:', statsRes.reason);
+    }
+
+    if (logsRes.status === 'fulfilled') {
+      setLogs(logsRes.value.data);
+    } else {
+      console.error('Logs fetch error:', logsRes.reason);
     }
   }, []);
 
