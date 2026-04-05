@@ -1,6 +1,6 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid, Legend, Cell
+  ResponsiveContainer, CartesianGrid, Cell
 } from 'recharts';
 
 function InjectionChart({ logs }) {
