@@ -1,5 +1,4 @@
 require('dotenv').config();
-console.log(process.env.MONGO_URI);
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -7,7 +6,12 @@ const rateLimiter = require('./middleware/rateLimiter');
 const gatewayRoutes = require('./routes/gateway');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://ai-gateway-puce.vercel.app'
+  ]
+}));
 app.use(express.json());
 
 app.use((req, res, next) => {
