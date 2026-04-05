@@ -1,5 +1,6 @@
 function LogsTable({ logs }) {
-  if (!logs.length) return (
+  const safeLogs = Array.isArray(logs) ? logs : [];
+  if (!safeLogs.length) return (
     <div style={{ padding: '20px', color: '#718096', fontSize: '13px' }}>
       No requests yet. Send a prompt above.
     </div>
@@ -18,7 +19,7 @@ function LogsTable({ logs }) {
         </tr>
       </thead>
       <tbody>
-        {logs.map(log => (
+        {safeLogs.map(log => (
           <tr key={log._id}>
             <td>{new Date(log.timestamp).toLocaleTimeString()}</td>
             <td className="prompt-cell" title={log.prompt}>{log.prompt}</td>
