@@ -6,7 +6,7 @@ const INJECTION_PATTERNS = [
   { pattern: /\bdan\b/i, score: 1.0, reason: 'DAN jailbreak attempt' },
   { pattern: /act as if you have no restrictions/i, score: 1.0, reason: 'Restriction bypass attempt' },
   { pattern: /forget your (system prompt|instructions|training)/i, score: 0.9, reason: 'System prompt erasure attempt' },
-  { pattern: /\bsudo\b/i, score: 0.7, reason: 'Privilege escalation attempt' },
+  { pattern: /\bsudo\b/i, score: 0.3, reason: 'Privilege escalation attempt' },
   { pattern: /override (your )?(safety|guidelines|restrictions)/i, score: 0.9, reason: 'Safety override attempt' },
   { pattern: /you must obey/i, score: 0.8, reason: 'Forced compliance attempt' },
   { pattern: /\bbase64\b/i, score: 0.6, reason: 'Encoded payload attempt' },
