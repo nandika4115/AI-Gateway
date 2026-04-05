@@ -6,7 +6,7 @@ import LatencyChart from './components/LatencyChart';
 import InjectionChart from './components/InjectionChart';
 import './App.css';
 
-const API = 'http://localhost:5000/api';
+const API = process.env.REACT_APP_API_URL;
 
 function RoutingBadge({ routingReason, model }) {
   const isLarge = model?.includes('70b');
