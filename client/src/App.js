@@ -6,8 +6,7 @@ import LatencyChart from './components/LatencyChart';
 import InjectionChart from './components/InjectionChart';
 import './App.css';
 
-const API = process.env.REACT_APP_API_URL;
-
+const API = process.env.REACT_APP_API_URL || 'https://ai-gateway-server.onrender.com/api';
 function RoutingBadge({ routingReason, model }) {
   const isLarge = model?.includes('70b');
   return (
