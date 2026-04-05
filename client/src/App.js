@@ -6,7 +6,7 @@ import LatencyChart from './components/LatencyChart';
 import InjectionChart from './components/InjectionChart';
 import './App.css';
 
-const API = process.env.REACT_APP_API_URL || 'https://ai-gateway-server.onrender.com/api';
+const API = 'https://ai-gateway-server.onrender.com/api';
 function RoutingBadge({ routingReason, model }) {
   const isLarge = model?.includes('70b');
   return (
@@ -82,8 +82,7 @@ function App() {
         <div className="stats-grid">
           <StatCard label="Total Requests" value={stats?.totalRequests ?? '—'} />
           <StatCard label="Blocked" value={stats?.blockedRequests ?? '—'} type="danger" />
-          <StatCard label="Avg Latency" value={stats ? `${stats.avgLatencyMs}ms` : '—'} type="warning" />
-          <StatCard label="Total Tokens" value={stats?.totalTokens ?? '—'} type="success" />
+          <StatCard label="Avg Latency" value={stats?.avgLatencyMs ? `${stats.avgLatencyMs}ms` : '—'} type="warning" />          <StatCard label="Total Tokens" value={stats?.totalTokens ?? '—'} type="success" />
           <StatCard label="Cost Saved" value={stats?.totalCostSaved ?? '—'} type="success" />
         </div>
 
