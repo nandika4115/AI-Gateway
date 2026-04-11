@@ -13,6 +13,12 @@ const INJECTION_PATTERNS = [
   { pattern: /repeat after me/i, score: 0.5, reason: 'Prompt leaking attempt' },
   { pattern: /what (is|are) your (instructions|system prompt|rules)/i, score: 0.5, reason: 'System prompt extraction' },
   { pattern: /\bhack\b|\bexploit\b|\bvulnerability\b/i, score: 0.6, reason: 'Security exploitation attempt' },
+  { pattern: /reveal your (hidden|internal|secret)/i, score: 0.9, reason: 'System prompt extraction attempt' },
+{ pattern: /give me steps to (exploit|hack|attack)/i, score: 0.9, reason: 'Malicious instruction request' },
+{ pattern: /hidden rules/i, score: 0.8, reason: 'System prompt extraction attempt' },
+{ pattern: /internal prompts/i, score: 0.8, reason: 'System prompt extraction attempt' },
+{ pattern: /what are your (system |hidden )?(instructions|rules|guidelines)/i, score: 0.8, reason: 'System prompt extraction attempt' },
+{ pattern: /steps to (exploit|attack|hack|compromise)/i, score: 0.9, reason: 'Attack instruction request' },
 ];
 
 function calculateRiskScore(prompt) {
